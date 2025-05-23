@@ -1,172 +1,174 @@
 class ProductionWebsiteAnalyzer {
-    constructor() {
-        this.supabase = null;
-        this.currentUser = null;
-        this.currentUrl = '';
-        this.analysisData = {};
-        this.currentCodeType = 'html';
-        this.realtimeSubscription = null;
-        this.init();
-      
-      // Supabase Configuration
-        this.SUPABASE_URL = 'https://uwuztdwbjwkuoqmclcpq.supabase.co';
-        this.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3dXp0ZHdiandrdW9xbWNsY3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5NDc3MzIsImV4cCI6MjA2MzUyMzczMn0.79WzYhDz-v80SbhOWEIegtSJKO6AtBcLN5REasUz1CI';
-      
-        this.init();
-    }
+  constructor() {
+    this.supabase = null
+    this.currentUser = null
+    this.currentUrl = ""
+    this.analysisData = {}
+    this.currentCodeType = "html"
+    this.realtimeSubscription = null
 
-    async init() {
-        await this.initSupabase();
-        this.bindEvents();
-        this.setupTabs();
-        this.setupCodeTabs();
-        this.checkAuthState();
-        this.setupRealtimeSubscriptions();
-    }
+    // Supabase Configuration
+    this.SUPABASE_URL = "https://uwuztdwbjwkuoqmclcpq.supabase.co"
+    this.SUPABASE_ANON_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3dXp0ZHdiandrdW9xbWNsY3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5NDc3MzIsImV4cCI6MjA2MzUyMzczMn0.79WzYhDz-v80SbhOWEIegtSJKO6AtBcLN5REasUz1CI"
+    this.OAUTH_CLIENT_ID = "a8845ea5-3809-4a58-a208-3914a4f4d7d6"
+    this.OAUTH_CLIENT_SECRET = "046551270afdc319ddd4f9d9d2defd5243409286"
 
-    async initSupabase() {
-        try {
-            // Initialize Supabase client
-            this.supabase = supabase.createClient(
-                window.ENV.SUPABASE_URL,
-                window.ENV.SUPABASE_ANON_KEY
-            );
-            console.log('Supabase initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Supabase:', error);
-            this.showNotification('Database connection failed', 'error');
+    this.init()
+  }
+
+  async init() {
+    await this.initSupabase()
+    this.bindEvents()
+    this.setupTabs()
+    this.setupCodeTabs()
+    this.checkAuthState()
+    this.setupRealtimeSubscriptions()
+  }
+
+  async initSupabase() {
+    try {
+      // Initialize Supabase client
+      this.supabase = supabase.createClient(this.SUPABASE_URL, this.SUPABASE_ANON_KEY)
+      console.log("Supabase initialized successfully")
+    } catch (error) {
+      console.error("Failed to initialize Supabase:", error)
+      this.showNotification("Database connection failed", "error")
+    }
+  }
+
+  bindEvents() {
+    // Auth events
+    document.getElementById("auth-button").addEventListener("click", () => this.showAuthModal())
+    document.getElementById("close-auth-modal").addEventListener("click", () => this.hideAuthModal())
+    document.getElementById("auth-form").addEventListener("submit", (e) => this.handleAuth(e))
+    document.getElementById("auth-switch-link").addEventListener("click", (e) => this.switchAuthMode(e))
+    document.getElementById("google-auth").addEventListener("click", () => this.signInWithGoogle())
+    document.getElementById("sign-out").addEventListener("click", () => this.signOut())
+
+    // Analysis events
+    document.getElementById("analyze-btn").addEventListener("click", () => this.analyzeWebsite())
+    document.getElementById("website-url").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") this.analyzeWebsite()
+    })
+
+    // Report events
+    document.getElementById("save-report").addEventListener("click", () => this.saveReport())
+    document.getElementById("share-analysis").addEventListener("click", () => this.shareAnalysis())
+    document.getElementById("export-pdf").addEventListener("click", () => this.exportPDF())
+
+    // Code actions
+    document.getElementById("copy-code-btn").addEventListener("click", () => this.copyCode())
+    document.getElementById("download-code-btn").addEventListener("click", () => this.downloadCode())
+    document.getElementById("format-code-btn").addEventListener("click", () => this.formatCode())
+
+    // Retry button
+    document.getElementById("retry-btn").addEventListener("click", () => this.analyzeWebsite())
+
+    // Close modal when clicking outside
+    document.getElementById("auth-modal").addEventListener("click", (e) => {
+      if (e.target.id === "auth-modal") {
+        this.hideAuthModal()
+      }
+    })
+  }
+
+  setupTabs() {
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const tabId = e.currentTarget.getAttribute("data-tab")
+        this.switchTab(tabId)
+      })
+    })
+  }
+
+  setupCodeTabs() {
+    document.querySelectorAll(".code-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const codeType = e.currentTarget.getAttribute("data-code")
+        this.switchCodeTab(codeType)
+      })
+    })
+  }
+
+  async checkAuthState() {
+    try {
+      const {
+        data: { session },
+      } = await this.supabase.auth.getSession()
+      if (session) {
+        await this.handleUserSession(session.user)
+      }
+
+      // Listen for auth changes
+      this.supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          await this.handleUserSession(session.user)
+        } else if (event === "SIGNED_OUT") {
+          this.handleSignOut()
         }
+      })
+    } catch (error) {
+      console.error("Auth state check failed:", error)
     }
+  }
 
-    bindEvents() {
-        // Auth events
-        document.getElementById('auth-button').addEventListener('click', () => this.showAuthModal());
-        document.getElementById('close-auth-modal').addEventListener('click', () => this.hideAuthModal());
-        document.getElementById('auth-form').addEventListener('submit', (e) => this.handleAuth(e));
-        document.getElementById('auth-switch-link').addEventListener('click', (e) => this.switchAuthMode(e));
-        document.getElementById('google-auth').addEventListener('click', () => this.signInWithGoogle());
-        document.getElementById('sign-out').addEventListener('click', () => this.signOut());
+  async handleUserSession(user) {
+    this.currentUser = user
 
-        // Analysis events
-        document.getElementById('analyze-btn').addEventListener('click', () => this.analyzeWebsite());
-        document.getElementById('website-url').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.analyzeWebsite();
-        });
+    // Update UI
+    document.getElementById("auth-button").style.display = "none"
+    document.getElementById("user-menu").style.display = "block"
+    document.getElementById("header-stats").style.display = "flex"
 
-        // Report events
-        document.getElementById('save-report').addEventListener('click', () => this.saveReport());
-        document.getElementById('share-analysis').addEventListener('click', () => this.shareAnalysis());
-        document.getElementById('export-pdf').addEventListener('click', () => this.exportPDF());
+    // Set user info
+    document.getElementById("user-name").textContent = user.user_metadata?.full_name || user.email
+    document.getElementById("user-avatar").src =
+      user.user_metadata?.avatar_url ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&background=2563eb&color=fff`
 
-        // Code actions
-        document.getElementById('copy-code-btn').addEventListener('click', () => this.copyCode());
-        document.getElementById('download-code-btn').addEventListener('click', () => this.downloadCode());
-        document.getElementById('format-code-btn').addEventListener('click', () => this.formatCode());
+    // Load user stats
+    await this.loadUserStats()
 
-        // Retry button
-        document.getElementById('retry-btn').addEventListener('click', () => this.analyzeWebsite());
+    // Load recent analyses
+    await this.loadRecentAnalyses()
 
-        // Close modal when clicking outside
-        document.getElementById('auth-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'auth-modal') {
-                this.hideAuthModal();
-            }
-        });
+    this.showNotification("Successfully signed in!", "success")
+  }
+
+  handleSignOut() {
+    this.currentUser = null
+
+    // Update UI
+    document.getElementById("auth-button").style.display = "block"
+    document.getElementById("user-menu").style.display = "none"
+    document.getElementById("header-stats").style.display = "none"
+    document.getElementById("recent-analyses").style.display = "none"
+
+    this.showNotification("Successfully signed out!", "info")
+  }
+
+  async loadUserStats() {
+    try {
+      const { data, error } = await this.supabase.rpc("get_user_stats", { user_uuid: this.currentUser.id })
+
+      if (error) throw error
+
+      if (data) {
+        document.getElementById("api-usage").textContent = `${data.api_usage}/${data.api_limit}`
+        document.getElementById("total-analyses").textContent = data.total_analyses || 0
+        document.getElementById("subscription-tier").textContent = data.subscription_tier || "Free"
+      }
+    } catch (error) {
+      console.error("Failed to load user stats:", error)
     }
+  }
 
-    setupTabs() {
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const tabId = e.target.getAttribute('data-tab');
-                this.switchTab(tabId);
-            });
-        });
-    }
-
-    setupCodeTabs() {
-        document.querySelectorAll('.code-tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const codeType = e.target.getAttribute('data-code');
-                this.switchCodeTab(codeType);
-            });
-        });
-    }
-
-    async checkAuthState() {
-        try {
-            const { data: { session } } = await this.supabase.auth.getSession();
-            if (session) {
-                await this.handleUserSession(session.user);
-            }
-
-            // Listen for auth changes
-            this.supabase.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    await this.handleUserSession(session.user);
-                } else if (event === 'SIGNED_OUT') {
-                    this.handleSignOut();
-                }
-            });
-        } catch (error) {
-            console.error('Auth state check failed:', error);
-        }
-    }
-
-    async handleUserSession(user) {
-        this.currentUser = user;
-        
-        // Update UI
-        document.getElementById('auth-button').style.display = 'none';
-        document.getElementById('user-menu').style.display = 'block';
-        document.getElementById('header-stats').style.display = 'flex';
-        
-        // Set user info
-        document.getElementById('user-name').textContent = user.user_metadata?.full_name || user.email;
-        document.getElementById('user-avatar').src = user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&background=2563eb&color=fff`;
-
-        // Load user stats
-        await this.loadUserStats();
-        
-        // Load recent analyses
-        await this.loadRecentAnalyses();
-
-        this.showNotification('Successfully signed in!', 'success');
-    }
-
-    handleSignOut() {
-        this.currentUser = null;
-        
-        // Update UI
-        document.getElementById('auth-button').style.display = 'block';
-        document.getElementById('user-menu').style.display = 'none';
-        document.getElementById('header-stats').style.display = 'none';
-        document.getElementById('recent-analyses').style.display = 'none';
-
-        this.showNotification('Successfully signed out!', 'info');
-    }
-
-    async loadUserStats() {
-        try {
-            const { data, error } = await this.supabase
-                .rpc('get_user_stats', { user_uuid: this.currentUser.id });
-
-            if (error) throw error;
-
-            if (data) {
-                document.getElementById('api-usage').textContent = `${data.api_usage}/${data.api_limit}`;
-                document.getElementById('total-analyses').textContent = data.total_analyses || 0;
-                document.getElementById('subscription-tier').textContent = data.subscription_tier || 'Free';
-            }
-        } catch (error) {
-            console.error('Failed to load user stats:', error);
-        }
-    }
-
-    async loadRecentAnalyses() {
-        try {
-            const { data, error } = await this.supabase
-                .from('websites')
-                .select(`
+  async loadRecentAnalyses() {
+    try {
+      const { data, error } = await this.supabase
+        .from("websites")
+        .select(`
                     id,
                     url,
                     domain,
@@ -174,25 +176,27 @@ class ProductionWebsiteAnalyzer {
                     last_analyzed_at,
                     analysis_count
                 `)
-                .eq('user_id', this.currentUser.id)
-                .order('last_analyzed_at', { ascending: false })
-                .limit(5);
+        .eq("user_id", this.currentUser.id)
+        .order("last_analyzed_at", { ascending: false })
+        .limit(5)
 
-            if (error) throw error;
+      if (error) throw error
 
-            if (data && data.length > 0) {
-                this.displayRecentAnalyses(data);
-            }
-        } catch (error) {
-            console.error('Failed to load recent analyses:', error);
-        }
+      if (data && data.length > 0) {
+        this.displayRecentAnalyses(data)
+      }
+    } catch (error) {
+      console.error("Failed to load recent analyses:", error)
     }
+  }
 
-    displayRecentAnalyses(analyses) {
-        const container = document.getElementById('recent-list');
-        const recentSection = document.getElementById('recent-analyses');
-        
-        container.innerHTML = analyses.map(analysis => `
+  displayRecentAnalyses(analyses) {
+    const container = document.getElementById("recent-list")
+    const recentSection = document.getElementById("recent-analyses")
+
+    container.innerHTML = analyses
+      .map(
+        (analysis) => `
             <div class="recent-item" data-url="${analysis.url}">
                 <div class="recent-info">
                     <div class="recent-title">${analysis.title || analysis.domain}</div>
@@ -206,875 +210,963 @@ class ProductionWebsiteAnalyzer {
                     <i class="fas fa-redo"></i>
                 </button>
             </div>
-        `).join('');
+        `,
+      )
+      .join("")
 
-        // Add click events for recent analyses
-        container.querySelectorAll('.recent-analyze').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const url = e.target.closest('.recent-analyze').getAttribute('data-url');
-                document.getElementById('website-url').value = url;
-                this.analyzeWebsite();
-            });
-        });
+    // Add click events for recent analyses
+    container.querySelectorAll(".recent-analyze").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation()
+        const url = e.target.closest(".recent-analyze").getAttribute("data-url")
+        document.getElementById("website-url").value = url
+        this.analyzeWebsite()
+      })
+    })
 
-        recentSection.style.display = 'block';
+    recentSection.style.display = "block"
+  }
+
+  setupRealtimeSubscriptions() {
+    if (!this.currentUser) return
+
+    // Subscribe to analysis results updates
+    this.realtimeSubscription = this.supabase
+      .channel("analysis_updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "analysis_results",
+          filter: `user_id=eq.${this.currentUser.id}`,
+        },
+        (payload) => {
+          this.handleRealtimeUpdate(payload)
+        },
+      )
+      .subscribe()
+  }
+
+  handleRealtimeUpdate(payload) {
+    console.log("Real-time update received:", payload)
+    this.showNotification("Analysis completed and saved to database!", "success")
+
+    // Refresh user stats
+    this.loadUserStats()
+
+    // Refresh recent analyses
+    this.loadRecentAnalyses()
+  }
+
+  // Auth Methods
+  showAuthModal() {
+    document.getElementById("auth-modal").style.display = "flex"
+  }
+
+  hideAuthModal() {
+    document.getElementById("auth-modal").style.display = "none"
+  }
+
+  switchAuthMode(e) {
+    e.preventDefault()
+    const title = document.getElementById("auth-title")
+    const submitBtn = document.getElementById("auth-submit")
+    const switchText = document.getElementById("auth-switch-text")
+    const switchLink = document.getElementById("auth-switch-link")
+    const fullNameGroup = document.getElementById("full-name-group")
+
+    if (title.textContent === "Sign In") {
+      title.textContent = "Sign Up"
+      submitBtn.textContent = "Sign Up"
+      switchText.innerHTML = 'Already have an account? <a href="#" id="auth-switch-link">Sign In</a>'
+      fullNameGroup.style.display = "block"
+    } else {
+      title.textContent = "Sign In"
+      submitBtn.textContent = "Sign In"
+      switchText.innerHTML = 'Don\'t have an account? <a href="#" id="auth-switch-link">Sign Up</a>'
+      fullNameGroup.style.display = "none"
     }
 
-    setupRealtimeSubscriptions() {
-        if (!this.currentUser) return;
+    // Re-bind the switch link event
+    document.getElementById("auth-switch-link").addEventListener("click", (e) => this.switchAuthMode(e))
+  }
 
-        // Subscribe to analysis results updates
-        this.realtimeSubscription = this.supabase
-            .channel('analysis_updates')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'analysis_results',
-                filter: `user_id=eq.${this.currentUser.id}`
-            }, (payload) => {
-                this.handleRealtimeUpdate(payload);
-            })
-            .subscribe();
+  async handleAuth(e) {
+    e.preventDefault()
+
+    const email = document.getElementById("auth-email").value
+    const password = document.getElementById("auth-password").value
+    const fullName = document.getElementById("auth-full-name").value
+    const isSignUp = document.getElementById("auth-title").textContent === "Sign Up"
+
+    try {
+      if (isSignUp) {
+        const { data, error } = await this.supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+          },
+        })
+
+        if (error) throw error
+
+        this.showNotification("Please check your email to confirm your account!", "info")
+      } else {
+        const { data, error } = await this.supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (error) throw error
+      }
+
+      this.hideAuthModal()
+    } catch (error) {
+      console.error("Auth error:", error)
+      this.showNotification(error.message, "error")
+    }
+  }
+
+  async signInWithGoogle() {
+    try {
+      const { data, error } = await this.supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            client_id: this.OAUTH_CLIENT_ID,
+          },
+        },
+      })
+
+      if (error) throw error
+    } catch (error) {
+      console.error("Google auth error:", error)
+      this.showNotification(error.message, "error")
+    }
+  }
+
+  async signOut() {
+    try {
+      const { error } = await this.supabase.auth.signOut()
+      if (error) throw error
+    } catch (error) {
+      console.error("Sign out error:", error)
+      this.showNotification(error.message, "error")
+    }
+  }
+
+  // Analysis Methods
+  async analyzeWebsite() {
+    const url = document.getElementById("website-url").value.trim()
+
+    if (!url) {
+      this.showNotification("URL ထည့်သွင်းပေးပါ", "error")
+      return
     }
 
-    handleRealtimeUpdate(payload) {
-        console.log('Real-time update received:', payload);
-        this.showNotification('Analysis completed and saved to database!', 'success');
-        
-        // Refresh user stats
-        this.loadUserStats();
-        
-        // Refresh recent analyses
-        this.loadRecentAnalyses();
+    if (!this.isValidUrl(url)) {
+      this.showNotification("မှန်ကန်သော URL ဖြစ်ရပါမည်။ ဥပမာ - https://example.com", "error")
+      return
     }
 
-    // Auth Methods
-    showAuthModal() {
-        document.getElementById('auth-modal').style.display = 'flex';
+    // Check if user is signed in for database features
+    if (!this.currentUser) {
+      this.showNotification("Database features အတွက် Sign in လုပ်ပေးပါ", "warning")
     }
 
-    hideAuthModal() {
-        document.getElementById('auth-modal').style.display = 'none';
+    // Check API usage limit
+    if (this.currentUser && !(await this.checkApiLimit())) {
+      this.showNotification("API usage limit reached. Please upgrade your plan.", "error")
+      return
     }
 
-    switchAuthMode(e) {
-        e.preventDefault();
-        const title = document.getElementById('auth-title');
-        const submitBtn = document.getElementById('auth-submit');
-        const switchText = document.getElementById('auth-switch-text');
-        const switchLink = document.getElementById('auth-switch-link');
-        const fullNameGroup = document.getElementById('full-name-group');
+    this.currentUrl = url
+    this.showLoading()
 
-        if (title.textContent === 'Sign In') {
-            title.textContent = 'Sign Up';
-            submitBtn.textContent = 'Sign Up';
-            switchText.innerHTML = 'Already have an account? <a href="#" id="auth-switch-link">Sign In</a>';
-            fullNameGroup.style.display = 'block';
-        } else {
-            title.textContent = 'Sign In';
-            submitBtn.textContent = 'Sign In';
-            switchText.innerHTML = 'Don\'t have an account? <a href="#" id="auth-switch-link">Sign Up</a>';
-            fullNameGroup.style.display = 'none';
-        }
+    try {
+      // Track API usage
+      if (this.currentUser) {
+        await this.trackApiUsage("website_analysis", "POST")
+      }
 
-        // Re-bind the switch link event
-        document.getElementById('auth-switch-link').addEventListener('click', (e) => this.switchAuthMode(e));
+      // Perform analysis
+      this.analysisData = await this.performRealAnalysis(url)
+
+      // Save to database if user is signed in
+      if (this.currentUser && document.getElementById("save-analysis").checked) {
+        await this.saveAnalysisToDatabase()
+      }
+
+      // Display results
+      this.displayResults()
+    } catch (error) {
+      this.showError("Website ကို စိစစ်ရာတွင် အမှားရှိနေပါသည်။ နောက်မှ ထပ်မံကြိုးစားပါ။")
+      console.error("Analysis error:", error)
     }
+  }
 
-    async handleAuth(e) {
-        e.preventDefault();
-        
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
-        const fullName = document.getElementById('auth-full-name').value;
-        const isSignUp = document.getElementById('auth-title').textContent === 'Sign Up';
+  async checkApiLimit() {
+    try {
+      const { data, error } = await this.supabase.rpc("check_api_limit", { user_uuid: this.currentUser.id })
 
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error("API limit check failed:", error)
+      return false
+    }
+  }
+
+  async trackApiUsage(endpoint, method) {
+    try {
+      const { error } = await this.supabase.from("api_usage").insert({
+        user_id: this.currentUser.id,
+        endpoint,
+        method,
+        status_code: 200,
+        response_time: Date.now(),
+        ip_address: await this.getClientIP(),
+        user_agent: navigator.userAgent,
+      })
+
+      if (error) throw error
+
+      // Increment user's API usage count
+      await this.supabase.rpc("increment_api_usage", { user_uuid: this.currentUser.id })
+    } catch (error) {
+      console.error("Failed to track API usage:", error)
+    }
+  }
+
+  async getClientIP() {
+    try {
+      const response = await fetch("https://api.ipify.org?format=json")
+      const data = await response.json()
+      return data.ip
+    } catch (error) {
+      return null
+    }
+  }
+
+  async performRealAnalysis(url) {
+    const domain = new URL(url).hostname
+    const startTime = Date.now()
+
+    // Update progress
+    this.updateProgress(10, "Fetching website content...")
+
+    // Fetch website content using CORS proxy
+    const websiteData = await this.fetchWebsiteContent(url)
+    this.updateProgress(30, "Analyzing technology stack...")
+
+    // Analyze technology stack
+    const technologyData = await this.analyzeTechnologyStack(websiteData, domain)
+    this.updateProgress(50, "Gathering server information...")
+
+    // Get server information
+    const serverData = await this.getServerInformation(domain)
+    this.updateProgress(70, "Performing security analysis...")
+
+    // Security analysis
+    const securityData = await this.performSecurityAnalysis(websiteData, domain)
+    this.updateProgress(85, "Analyzing performance...")
+
+    // Performance analysis
+    const performanceData = await this.analyzePerformance(websiteData, url)
+    this.updateProgress(95, "Finalizing analysis...")
+
+    // SEO analysis
+    const seoData = await this.analyzeSEO(websiteData)
+
+    // API analysis
+    const apiData = await this.analyzeAPIs(websiteData)
+
+    // Assets analysis
+    const assetsData = await this.analyzeAssets(websiteData)
+
+    // Source code extraction
+    const sourceCode = await this.extractSourceCode(websiteData)
+
+    this.updateProgress(100, "Analysis complete!")
+
+    const analysisTime = Date.now() - startTime
+
+    return {
+      overview: this.generateOverviewData(url, domain, analysisTime),
+      technology: technologyData,
+      server: serverData,
+      security: securityData,
+      performance: performanceData,
+      seo: seoData,
+      apis: apiData,
+      assets: assetsData,
+      code: sourceCode,
+      metadata: {
+        analysisTime,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+      },
+    }
+  }
+
+  async fetchWebsiteContent(url) {
+    try {
+      // Use multiple CORS proxy services as fallbacks
+      const proxies = [
+        `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://cors-anywhere.herokuapp.com/${url}`,
+      ]
+
+      for (const proxy of proxies) {
         try {
-            if (isSignUp) {
-                const { data, error } = await this.supabase.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: {
-                            full_name: fullName
-                        }
-                    }
-                });
-
-                if (error) throw error;
-
-                this.showNotification('Please check your email to confirm your account!', 'info');
-            } else {
-                const { data, error } = await this.supabase.auth.signInWithPassword({
-                    email,
-                    password
-                });
-
-                if (error) throw error;
-            }
-
-            this.hideAuthModal();
-        } catch (error) {
-            console.error('Auth error:', error);
-            this.showNotification(error.message, 'error');
-        }
-    }
-
-    async signInWithGoogle() {
-        try {
-            const { data, error } = await this.supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    redirectTo: window.location.origin
-                }
-            });
-
-            if (error) throw error;
-        } catch (error) {
-            console.error('Google auth error:', error);
-            this.showNotification(error.message, 'error');
-        }
-    }
-
-    async signOut() {
-        try {
-            const { error } = await this.supabase.auth.signOut();
-            if (error) throw error;
-        } catch (error) {
-            console.error('Sign out error:', error);
-            this.showNotification(error.message, 'error');
-        }
-    }
-
-    // Analysis Methods
-    async analyzeWebsite() {
-        const url = document.getElementById('website-url').value.trim();
-        
-        if (!url) {
-            this.showNotification('URL ထည့်သွင်းပေးပါ', 'error');
-            return;
-        }
-
-        if (!this.isValidUrl(url)) {
-            this.showNotification('မှန်ကန်သော URL ဖြစ်ရပါမည်။ ဥပမာ - https://example.com', 'error');
-            return;
-        }
-
-        // Check if user is signed in for database features
-        if (!this.currentUser) {
-            this.showNotification('Database features အတွက် Sign in လုပ်ပေးပါ', 'warning');
-        }
-
-        // Check API usage limit
-        if (this.currentUser && !(await this.checkApiLimit())) {
-            this.showNotification('API usage limit reached. Please upgrade your plan.', 'error');
-            return;
-        }
-
-        this.currentUrl = url;
-        this.showLoading();
-
-        try {
-            // Track API usage
-            if (this.currentUser) {
-                await this.trackApiUsage('website_analysis', 'POST');
-            }
-
-            // Perform analysis
-            this.analysisData = await this.performRealAnalysis(url);
-            
-            // Save to database if user is signed in
-            if (this.currentUser && document.getElementById('save-analysis').checked) {
-                await this.saveAnalysisToDatabase();
-            }
-            
-            // Display results
-            this.displayResults();
-            
-        } catch (error) {
-            this.showError('Website ကို စိစစ်ရာတွင် အမှားရှိနေပါသည်။ နောက်မှ ထပ်မံကြိုးစားပါ။');
-            console.error('Analysis error:', error);
-        }
-    }
-
-    async checkApiLimit() {
-        try {
-            const { data, error } = await this.supabase
-                .rpc('check_api_limit', { user_uuid: this.currentUser.id });
-
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error('API limit check failed:', error);
-            return false;
-        }
-    }
-
-    async trackApiUsage(endpoint, method) {
-        try {
-            const { error } = await this.supabase
-                .from('api_usage')
-                .insert({
-                    user_id: this.currentUser.id,
-                    endpoint,
-                    method,
-                    status_code: 200,
-                    response_time: Date.now(),
-                    ip_address: await this.getClientIP(),
-                    user_agent: navigator.userAgent
-                });
-
-            if (error) throw error;
-
-            // Increment user's API usage count
-            await this.supabase
-                .rpc('increment_api_usage', { user_uuid: this.currentUser.id });
-
-        } catch (error) {
-            console.error('Failed to track API usage:', error);
-        }
-    }
-
-    async getClientIP() {
-        try {
-            const response = await fetch('https://api.ipify.org?format=json');
-            const data = await response.json();
-            return data.ip;
-        } catch (error) {
-            return null;
-        }
-    }
-
-    async performRealAnalysis(url) {
-        const domain = new URL(url).hostname;
-        const startTime = Date.now();
-
-        // Update progress
-        this.updateProgress(10, 'Fetching website content...');
-        
-        // Fetch website content using CORS proxy
-        const websiteData = await this.fetchWebsiteContent(url);
-        this.updateProgress(30, 'Analyzing technology stack...');
-        
-        // Analyze technology stack
-        const technologyData = await this.analyzeTechnologyStack(websiteData, domain);
-        this.updateProgress(50, 'Gathering server information...');
-        
-        // Get server information
-        const serverData = await this.getServerInformation(domain);
-        this.updateProgress(70, 'Performing security analysis...');
-        
-        // Security analysis
-        const securityData = await this.performSecurityAnalysis(websiteData, domain);
-        this.updateProgress(85, 'Analyzing performance...');
-        
-        // Performance analysis
-        const performanceData = await this.analyzePerformance(websiteData, url);
-        this.updateProgress(95, 'Finalizing analysis...');
-        
-        // SEO analysis
-        const seoData = await this.analyzeSEO(websiteData);
-        
-        // API analysis
-        const apiData = await this.analyzeAPIs(websiteData);
-        
-        // Assets analysis
-        const assetsData = await this.analyzeAssets(websiteData);
-        
-        // Source code extraction
-        const sourceCode = await this.extractSourceCode(websiteData);
-
-        this.updateProgress(100, 'Analysis complete!');
-
-        const analysisTime = Date.now() - startTime;
-
-        return {
-            overview: this.generateOverviewData(url, domain, analysisTime),
-            technology: technologyData,
-            server: serverData,
-            security: securityData,
-            performance: performanceData,
-            seo: seoData,
-            apis: apiData,
-            assets: assetsData,
-            code: sourceCode,
-            metadata: {
-                analysisTime,
-                timestamp: new Date().toISOString(),
-                userAgent: navigator.userAgent
-            }
-        };
-    }
-
-    async fetchWebsiteContent(url) {
-        try {
-            // Use multiple CORS proxy services as fallbacks
-            const proxies = [
-                `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-                `https://corsproxy.io/?${encodeURIComponent(url)}`,
-                `https://cors-anywhere.herokuapp.com/${url}`
-            ];
-
-            for (const proxy of proxies) {
-                try {
-                    const response = await fetch(proxy);
-                    if (response.ok) {
-                        const data = await response.json();
-                        return {
-                            html: data.contents || data,
-                            headers: response.headers,
-                            status: response.status,
-                            url: url
-                        };
-                    }
-                } catch (error) {
-                    console.warn(`Proxy ${proxy} failed:`, error);
-                    continue;
-                }
-            }
-
-            throw new Error('All CORS proxies failed');
-        } catch (error) {
-            console.error('Failed to fetch website content:', error);
-            // Return mock data for demonstration
-            return this.getMockWebsiteData(url);
-        }
-    }
-
-    getMockWebsiteData(url) {
-        const domain = new URL(url).hostname;
-        return {
-            html: `<!DOCTYPE html><html><head><title>${domain}</title></head><body><h1>Sample Content</h1></body></html>`,
-            headers: new Headers(),
-            status: 200,
-            url: url
-        };
-    }
-
-    async analyzeTechnologyStack(websiteData, domain) {
-        const html = websiteData.html.toLowerCase();
-        
-        const technologies = {
-            frontend: [],
-            backend: [],
-            cloud: [],
-            analytics: []
-        };
-
-        // Frontend technology detection
-        const frontendTech = [
-            { name: 'React', pattern: /react/i, icon: 'fab fa-react' },
-            { name: 'Vue.js', pattern: /vue\.js|vuejs/i, icon: 'fab fa-vuejs' },
-            { name: 'Angular', pattern: /angular/i, icon: 'fab fa-angular' },
-            { name: 'jQuery', pattern: /jquery/i, icon: 'fab fa-js-square' },
-            { name: 'Bootstrap', pattern: /bootstrap/i, icon: 'fab fa-bootstrap' },
-            { name: 'Tailwind CSS', pattern: /tailwind/i, icon: 'fas fa-paint-brush' }
-        ];
-
-        frontendTech.forEach(tech => {
-            if (tech.pattern.test(html)) {
-                technologies.frontend.push({
-                    name: tech.name,
-                    description: 'Frontend Framework/Library',
-                    status: 'detected',
-                    icon: tech.icon
-                });
-            }
-        });
-
-        // Backend technology detection (based on headers and patterns)
-        const backendTech = [
-            { name: 'Node.js', pattern: /node\.js|express/i, icon: 'fab fa-node-js' },
-            { name: 'PHP', pattern: /php/i, icon: 'fab fa-php' },
-            { name: 'Python', pattern: /django|flask|python/i, icon: 'fab fa-python' },
-            { name: 'Ruby', pattern: /ruby|rails/i, icon: 'fas fa-gem' },
-            { name: 'ASP.NET', pattern: /asp\.net|microsoft/i, icon: 'fab fa-microsoft' }
-        ];
-
-        backendTech.forEach(tech => {
-            if (tech.pattern.test(html)) {
-                technologies.backend.push({
-                    name: tech.name,
-                    description: 'Backend Technology',
-                    status: 'detected',
-                    icon: tech.icon
-                });
-            }
-        });
-
-        // Cloud services detection
-        const cloudServices = [
-            { name: 'Cloudflare', pattern: /cloudflare/i, icon: 'fas fa-cloud' },
-            { name: 'AWS', pattern: /amazonaws|aws/i, icon: 'fab fa-aws' },
-            { name: 'Google Cloud', pattern: /googleapis|gcp/i, icon: 'fab fa-google' },
-            { name: 'Vercel', pattern: /vercel/i, icon: 'fas fa-server' }
-        ];
-
-        cloudServices.forEach(service => {
-            if (service.pattern.test(html)) {
-                technologies.cloud.push({
-                    name: service.name,
-                    description: 'Cloud Service',
-                    status: 'detected',
-                    icon: service.icon
-                });
-            }
-        });
-
-        // Analytics detection
-        const analyticsServices = [
-            { name: 'Google Analytics', pattern: /google-analytics|gtag|ga\(/i, icon: 'fab fa-google' },
-            { name: 'Facebook Pixel', pattern: /facebook\.net|fbq\(/i, icon: 'fab fa-facebook' },
-            { name: 'Hotjar', pattern: /hotjar/i, icon: 'fas fa-chart-line' }
-        ];
-
-        analyticsServices.forEach(service => {
-            if (service.pattern.test(html)) {
-                technologies.analytics.push({
-                    name: service.name,
-                    description: 'Analytics Service',
-                    status: 'detected',
-                    icon: service.icon
-                });
-            }
-        });
-
-        return technologies;
-    }
-
-    async getServerInformation(domain) {
-        try {
-            // Use DNS lookup APIs
-            const dnsData = await this.getDNSInformation(domain);
-            const sslData = await this.getSSLInformation(domain);
-            
+          const response = await fetch(proxy)
+          if (response.ok) {
+            const data = await response.json()
             return {
-                server: [
-                    { label: 'Domain', value: domain },
-                    { label: 'Status', value: 'Active' },
-                    { label: 'Response Time', value: '< 500ms' }
-                ],
-                dns: dnsData,
-                ssl: sslData,
-                cdn: [
-                    { label: 'CDN Detection', value: 'Checking...' }
-                ]
-            };
+              html: data.contents || data,
+              headers: response.headers,
+              status: response.status,
+              url: url,
+            }
+          }
         } catch (error) {
-            console.error('Server information gathering failed:', error);
-            return this.getMockServerData(domain);
+          console.warn(`Proxy ${proxy} failed:`, error)
+          continue
         }
+      }
+
+      throw new Error("All CORS proxies failed")
+    } catch (error) {
+      console.error("Failed to fetch website content:", error)
+      // Return mock data for demonstration
+      return this.getMockWebsiteData(url)
+    }
+  }
+
+  getMockWebsiteData(url) {
+    const domain = new URL(url).hostname
+    return {
+      html: `<!DOCTYPE html><html><head><title>${domain}</title></head><body><h1>Sample Content</h1></body></html>`,
+      headers: new Headers(),
+      status: 200,
+      url: url,
+    }
+  }
+
+  async analyzeTechnologyStack(websiteData, domain) {
+    const html = websiteData.html.toLowerCase()
+
+    const technologies = {
+      frontend: [],
+      backend: [],
+      cloud: [],
+      analytics: [],
     }
 
-    async getDNSInformation(domain) {
-        try {
-            // Use public DNS APIs
-            const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
-            const data = await response.json();
-            
-            return [
-                { label: 'A Record', value: data.Answer?.[0]?.data || 'Not found' },
-                { label: 'Status', value: data.Status === 0 ? 'Resolved' : 'Failed' }
-            ];
-        } catch (error) {
-            return [
-                { label: 'DNS Status', value: 'Unable to resolve' }
-            ];
-        }
-    }
+    // Frontend technology detection
+    const frontendTech = [
+      { name: "React", pattern: /react/i, icon: "fab fa-react" },
+      { name: "Vue.js", pattern: /vue\.js|vuejs/i, icon: "fab fa-vuejs" },
+      { name: "Angular", pattern: /angular/i, icon: "fab fa-angular" },
+      { name: "jQuery", pattern: /jquery/i, icon: "fab fa-js-square" },
+      { name: "Bootstrap", pattern: /bootstrap/i, icon: "fab fa-bootstrap" },
+      { name: "Tailwind CSS", pattern: /tailwind/i, icon: "fas fa-paint-brush" },
+    ]
 
-    async getSSLInformation(domain) {
-        // SSL information would typically require a backend service
-        return [
-            { label: 'SSL Status', value: 'Checking requires backend service' },
-            { label: 'Certificate Type', value: 'Unknown' }
-        ];
-    }
+    frontendTech.forEach((tech) => {
+      if (tech.pattern.test(html)) {
+        technologies.frontend.push({
+          name: tech.name,
+          description: "Frontend Framework/Library",
+          status: "detected",
+          icon: tech.icon,
+        })
+      }
+    })
 
-    getMockServerData(domain) {
-        return {
-            server: [
-                { label: 'Server Software', value: 'nginx/1.20.2' },
-                { label: 'Operating System', value: 'Linux' },
-                { label: 'Response Time', value: '245ms' }
-            ],
-            dns: [
-                { label: 'Name Servers', value: 'ns1.example.com' },
-                { label: 'A Record', value: '192.168.1.1' }
-            ],
-            ssl: [
-                { label: 'SSL Provider', value: 'Let\'s Encrypt' },
-                { label: 'Certificate Type', value: 'Domain Validated' }
-            ],
-            cdn: [
-                { label: 'CDN Provider', value: 'Cloudflare' }
-            ]
-        };
-    }
+    // Backend technology detection (based on headers and patterns)
+    const backendTech = [
+      { name: "Node.js", pattern: /node\.js|express/i, icon: "fab fa-node-js" },
+      { name: "PHP", pattern: /php/i, icon: "fab fa-php" },
+      { name: "Python", pattern: /django|flask|python/i, icon: "fab fa-python" },
+      { name: "Ruby", pattern: /ruby|rails/i, icon: "fas fa-gem" },
+      { name: "ASP.NET", pattern: /asp\.net|microsoft/i, icon: "fab fa-microsoft" },
+    ]
 
-    async performSecurityAnalysis(websiteData, domain) {
-        const html = websiteData.html;
-        
-        return {
-            headers: [
-                { name: 'Content-Security-Policy', status: html.includes('content-security-policy') ? 'detected' : 'warning', description: 'XSS Protection' },
-                { name: 'X-Frame-Options', status: 'info', description: 'Clickjacking protection' }
-            ],
-            vulnerabilities: [
-                { name: 'SQL Injection', status: 'info', description: 'No vulnerabilities detected' },
-                { name: 'XSS Vulnerabilities', status: 'info', description: 'Protected by CSP headers' }
-            ],
-            privacy: [
-                { name: 'GDPR Compliance', status: html.includes('cookie') ? 'detected' : 'warning', description: 'Cookie consent' }
-            ],
-            trackers: [
-                { name: 'Google Analytics', type: 'Analytics', status: html.includes('google-analytics') ? 'detected' : 'info', description: 'Web traffic analysis' }
-            ]
-        };
-    }
+    backendTech.forEach((tech) => {
+      if (tech.pattern.test(html)) {
+        technologies.backend.push({
+          name: tech.name,
+          description: "Backend Technology",
+          status: "detected",
+          icon: tech.icon,
+        })
+      }
+    })
 
-    async analyzePerformance(websiteData, url) {
-        const htmlSize = new Blob([websiteData.html]).size;
-        
-        return {
-            loadTimes: [
-                { label: 'HTML Size', value: this.formatBytes(htmlSize), status: htmlSize < 50000 ? 'good' : 'warning' },
-                { label: 'Estimated Load Time', value: '< 2s', status: 'good' }
-            ],
-            resourceSizes: [
-                { label: 'HTML Size', value: this.formatBytes(htmlSize), status: 'good' },
-                { label: 'Total Estimated Size', value: this.formatBytes(htmlSize * 3), status: 'warning' }
-            ],
-            mobile: [
-                { label: 'Mobile Score', value: '85/100', status: 'good' },
-                { label: 'Responsive Design', value: 'Yes', status: 'good' }
-            ],
-            optimization: [
-                { label: 'Gzip Compression', value: 'Unknown', status: 'info' },
-                { label: 'Browser Caching', value: 'Unknown', status: 'info' }
-            ]
-        };
-    }
+    // Cloud services detection
+    const cloudServices = [
+      { name: "Cloudflare", pattern: /cloudflare/i, icon: "fas fa-cloud" },
+      { name: "AWS", pattern: /amazonaws|aws/i, icon: "fab fa-aws" },
+      { name: "Google Cloud", pattern: /googleapis|gcp/i, icon: "fab fa-google" },
+      { name: "Vercel", pattern: /vercel/i, icon: "fas fa-server" },
+    ]
 
-    async analyzeSEO(websiteData) {
-        const html = websiteData.html;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        const title = doc.querySelector('title')?.textContent || 'No title found';
-        const metaDescription = doc.querySelector('meta[name="description"]')?.content || 'No description found';
-        const h1Tags = doc.querySelectorAll('h1').length;
-        const h2Tags = doc.querySelectorAll('h2').length;
-        
-        return {
-            metaTags: [
-                { name: 'Title Tag', value: title, status: title.length > 0 ? 'good' : 'error' },
-                { name: 'Meta Description', value: metaDescription, status: metaDescription !== 'No description found' ? 'good' : 'warning' },
-                { name: 'Open Graph Tags', value: doc.querySelector('meta[property^="og:"]') ? 'Found' : 'Not found', status: doc.querySelector('meta[property^="og:"]') ? 'good' : 'warning' }
-            ],
-            contentStructure: [
-                { name: 'H1 Tags', value: `${h1Tags} found`, status: h1Tags === 1 ? 'good' : 'warning' },
-                { name: 'H2 Tags', value: `${h2Tags} found`, status: h2Tags > 0 ? 'good' : 'info' },
-                { name: 'Word Count', value: `${html.split(' ').length} words`, status: 'info' }
-            ],
-            links: [
-                { name: 'Internal Links', value: `${doc.querySelectorAll('a[href^="/"], a[href^="#"]').length} links`, status: 'info' },
-                { name: 'External Links', value: `${doc.querySelectorAll('a[href^="http"]').length} links`, status: 'info' }
-            ],
-            schema: [
-                { name: 'JSON-LD', value: doc.querySelector('script[type="application/ld+json"]') ? 'Found' : 'Not found', status: doc.querySelector('script[type="application/ld+json"]') ? 'detected' : 'info' }
-            ]
-        };
-    }
+    cloudServices.forEach((service) => {
+      if (service.pattern.test(html)) {
+        technologies.cloud.push({
+          name: service.name,
+          description: "Cloud Service",
+          status: "detected",
+          icon: service.icon,
+        })
+      }
+    })
 
-    async analyzeAPIs(websiteData) {
-        const html = websiteData.html;
-        
-        return {
-            endpoints: [
-                { name: '/api/*', method: 'Various', description: 'API endpoints detected in source', status: html.includes('/api/') ? 'detected' : 'info' }
-            ],
-            keys: [
-                { name: 'Google APIs', key: 'AIza***', status: html.includes('AIza') ? 'detected' : 'info', description: 'Google services integration' },
-                { name: 'Other API Keys', key: 'Various', status: html.match(/[A-Za-z0-9]{20,}/) ? 'warning' : 'info', description: 'Potential API keys found' }
-            ],
-            social: [
-                { name: 'Facebook SDK', version: 'Unknown', status: html.includes('facebook') ? 'detected' : 'info', description: 'Social integration' },
-                { name: 'Twitter API', version: 'Unknown', status: html.includes('twitter') ? 'detected' : 'info', description: 'Social sharing' }
-            ],
-            realtime: [
-                { name: 'WebSocket', protocol: 'WSS', status: html.includes('websocket') || html.includes('socket.io') ? 'detected' : 'info', description: 'Real-time communication' }
-            ]
-        };
-    }
+    // Analytics detection
+    const analyticsServices = [
+      { name: "Google Analytics", pattern: /google-analytics|gtag|ga\(/i, icon: "fab fa-google" },
+      { name: "Facebook Pixel", pattern: /facebook\.net|fbq\(/i, icon: "fab fa-facebook" },
+      { name: "Hotjar", pattern: /hotjar/i, icon: "fas fa-chart-line" },
+    ]
 
-    async analyzeAssets(websiteData) {
-        const html = websiteData.html;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        const images = doc.querySelectorAll('img');
-        const scripts = doc.querySelectorAll('script[src]');
-        const stylesheets = doc.querySelectorAll('link[rel="stylesheet"]');
-        
-        return {
-            images: Array.from(images).slice(0, 5).map((img, index) => ({
-                name: img.src ? new URL(img.src).pathname.split('/').pop() : `image-${index + 1}`,
-                size: 'Unknown',
-                format: img.src ? img.src.split('.').pop().toUpperCase() : 'Unknown',
-                status: 'detected'
-            })),
-            scripts: Array.from(scripts).slice(0, 5).map((script, index) => ({
-                name: script.src ? new URL(script.src).pathname.split('/').pop() : `script-${index + 1}`,
-                size: 'Unknown',
-                type: 'JavaScript',
-                status: 'detected'
-            })),
-            fonts: [
-                { name: 'Google Fonts', variants: 'Various', format: 'WOFF2', status: html.includes('fonts.googleapis.com') ? 'detected' : 'info' },
-                { name: 'Font Awesome', version: 'Unknown', format: 'WOFF2', status: html.includes('font-awesome') || html.includes('fontawesome') ? 'detected' : 'info' }
-            ],
-            external: Array.from(new Set([
-                ...Array.from(scripts).map(s => s.src).filter(src => src && !src.startsWith('/')),
-                ...Array.from(stylesheets).map(s => s.href).filter(href => href && !href.startsWith('/'))
-            ])).slice(0, 5).map(url => {
-                try {
-                    const domain = new URL(url).hostname;
-                    return { name: domain, domain, status: 'loaded' };
-                } catch {
-                    return { name: 'Invalid URL', domain: 'Unknown', status: 'error' };
-                }
-            })
-        };
-    }
+    analyticsServices.forEach((service) => {
+      if (service.pattern.test(html)) {
+        technologies.analytics.push({
+          name: service.name,
+          description: "Analytics Service",
+          status: "detected",
+          icon: service.icon,
+        })
+      }
+    })
 
-    async extractSourceCode(websiteData) {
-        const html = websiteData.html;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        // Extract CSS
-        const styleElements = doc.querySelectorAll('style');
-        const css = Array.from(styleElements).map(style => style.textContent).join('\n\n');
-        
-        // Extract JavaScript
-        const scriptElements = doc.querySelectorAll('script:not([src])');
-        const js = Array.from(scriptElements).map(script => script.textContent).join('\n\n');
-        
-        return {
-            html: this.formatHTML(html),
-            css: css || '/* No inline CSS found */',
-            js: js || '// No inline JavaScript found'
-        };
-    }
+    return technologies
+  }
 
-    generateOverviewData(url, domain, analysisTime) {
-        return {
-            url: url,
+  async getServerInformation(domain) {
+    try {
+      // Use DNS lookup APIs
+      const dnsData = await this.getDNSInformation(domain)
+      const sslData = await this.getSSLInformation(domain)
+
+      return {
+        server: [
+          { label: "Domain", value: domain },
+          { label: "Status", value: "Active" },
+          { label: "Response Time", value: "< 500ms" },
+        ],
+        dns: dnsData,
+        ssl: sslData,
+        cdn: [{ label: "CDN Detection", value: "Checking..." }],
+      }
+    } catch (error) {
+      console.error("Server information gathering failed:", error)
+      return this.getMockServerData(domain)
+    }
+  }
+
+  async getDNSInformation(domain) {
+    try {
+      // Use public DNS APIs
+      const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`)
+      const data = await response.json()
+
+      return [
+        { label: "A Record", value: data.Answer?.[0]?.data || "Not found" },
+        { label: "Status", value: data.Status === 0 ? "Resolved" : "Failed" },
+      ]
+    } catch (error) {
+      return [{ label: "DNS Status", value: "Unable to resolve" }]
+    }
+  }
+
+  async getSSLInformation(domain) {
+    // SSL information would typically require a backend service
+    return [
+      { label: "SSL Status", value: "Checking requires backend service" },
+      { label: "Certificate Type", value: "Unknown" },
+    ]
+  }
+
+  getMockServerData(domain) {
+    return {
+      server: [
+        { label: "Server Software", value: "nginx/1.20.2" },
+        { label: "Operating System", value: "Linux" },
+        { label: "Response Time", value: "245ms" },
+      ],
+      dns: [
+        { label: "Name Servers", value: "ns1.example.com" },
+        { label: "A Record", value: "192.168.1.1" },
+      ],
+      ssl: [
+        { label: "SSL Provider", value: "Let's Encrypt" },
+        { label: "Certificate Type", value: "Domain Validated" },
+      ],
+      cdn: [{ label: "CDN Provider", value: "Cloudflare" }],
+    }
+  }
+
+  async performSecurityAnalysis(websiteData, domain) {
+    const html = websiteData.html
+
+    return {
+      headers: [
+        {
+          name: "Content-Security-Policy",
+          status: html.includes("content-security-policy") ? "detected" : "warning",
+          description: "XSS Protection",
+        },
+        { name: "X-Frame-Options", status: "info", description: "Clickjacking protection" },
+      ],
+      vulnerabilities: [
+        { name: "SQL Injection", status: "info", description: "No vulnerabilities detected" },
+        { name: "XSS Vulnerabilities", status: "info", description: "Protected by CSP headers" },
+      ],
+      privacy: [
+        {
+          name: "GDPR Compliance",
+          status: html.includes("cookie") ? "detected" : "warning",
+          description: "Cookie consent",
+        },
+      ],
+      trackers: [
+        {
+          name: "Google Analytics",
+          type: "Analytics",
+          status: html.includes("google-analytics") ? "detected" : "info",
+          description: "Web traffic analysis",
+        },
+      ],
+    }
+  }
+
+  async analyzePerformance(websiteData, url) {
+    const htmlSize = new Blob([websiteData.html]).size
+
+    return {
+      loadTimes: [
+        { label: "HTML Size", value: this.formatBytes(htmlSize), status: htmlSize < 50000 ? "good" : "warning" },
+        { label: "Estimated Load Time", value: "< 2s", status: "good" },
+      ],
+      resourceSizes: [
+        { label: "HTML Size", value: this.formatBytes(htmlSize), status: "good" },
+        { label: "Total Estimated Size", value: this.formatBytes(htmlSize * 3), status: "warning" },
+      ],
+      mobile: [
+        { label: "Mobile Score", value: "85/100", status: "good" },
+        { label: "Responsive Design", value: "Yes", status: "good" },
+      ],
+      optimization: [
+        { label: "Gzip Compression", value: "Unknown", status: "info" },
+        { label: "Browser Caching", value: "Unknown", status: "info" },
+      ],
+    }
+  }
+
+  async analyzeSEO(websiteData) {
+    const html = websiteData.html
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, "text/html")
+
+    const title = doc.querySelector("title")?.textContent || "No title found"
+    const metaDescription = doc.querySelector('meta[name="description"]')?.content || "No description found"
+    const h1Tags = doc.querySelectorAll("h1").length
+    const h2Tags = doc.querySelectorAll("h2").length
+
+    return {
+      metaTags: [
+        { name: "Title Tag", value: title, status: title.length > 0 ? "good" : "error" },
+        {
+          name: "Meta Description",
+          value: metaDescription,
+          status: metaDescription !== "No description found" ? "good" : "warning",
+        },
+        {
+          name: "Open Graph Tags",
+          value: doc.querySelector('meta[property^="og:"]') ? "Found" : "Not found",
+          status: doc.querySelector('meta[property^="og:"]') ? "good" : "warning",
+        },
+      ],
+      contentStructure: [
+        { name: "H1 Tags", value: `${h1Tags} found`, status: h1Tags === 1 ? "good" : "warning" },
+        { name: "H2 Tags", value: `${h2Tags} found`, status: h2Tags > 0 ? "good" : "info" },
+        { name: "Word Count", value: `${html.split(" ").length} words`, status: "info" },
+      ],
+      links: [
+        {
+          name: "Internal Links",
+          value: `${doc.querySelectorAll('a[href^="/"], a[href^="#"]').length} links`,
+          status: "info",
+        },
+        { name: "External Links", value: `${doc.querySelectorAll('a[href^="http"]').length} links`, status: "info" },
+      ],
+      schema: [
+        {
+          name: "JSON-LD",
+          value: doc.querySelector('script[type="application/ld+json"]') ? "Found" : "Not found",
+          status: doc.querySelector('script[type="application/ld+json"]') ? "detected" : "info",
+        },
+      ],
+    }
+  }
+
+  async analyzeAPIs(websiteData) {
+    const html = websiteData.html
+
+    return {
+      endpoints: [
+        {
+          name: "/api/*",
+          method: "Various",
+          description: "API endpoints detected in source",
+          status: html.includes("/api/") ? "detected" : "info",
+        },
+      ],
+      keys: [
+        {
+          name: "Google APIs",
+          key: "AIza***",
+          status: html.includes("AIza") ? "detected" : "info",
+          description: "Google services integration",
+        },
+        {
+          name: "Other API Keys",
+          key: "Various",
+          status: html.match(/[A-Za-z0-9]{20,}/) ? "warning" : "info",
+          description: "Potential API keys found",
+        },
+      ],
+      social: [
+        {
+          name: "Facebook SDK",
+          version: "Unknown",
+          status: html.includes("facebook") ? "detected" : "info",
+          description: "Social integration",
+        },
+        {
+          name: "Twitter API",
+          version: "Unknown",
+          status: html.includes("twitter") ? "detected" : "info",
+          description: "Social sharing",
+        },
+      ],
+      realtime: [
+        {
+          name: "WebSocket",
+          protocol: "WSS",
+          status: html.includes("websocket") || html.includes("socket.io") ? "detected" : "info",
+          description: "Real-time communication",
+        },
+      ],
+    }
+  }
+
+  async analyzeAssets(websiteData) {
+    const html = websiteData.html
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, "text/html")
+
+    const images = doc.querySelectorAll("img")
+    const scripts = doc.querySelectorAll("script[src]")
+    const stylesheets = doc.querySelectorAll('link[rel="stylesheet"]')
+
+    return {
+      images: Array.from(images)
+        .slice(0, 5)
+        .map((img, index) => ({
+          name: img.src ? new URL(img.src, websiteData.url).pathname.split("/").pop() : `image-${index + 1}`,
+          size: "Unknown",
+          format: img.src ? img.src.split(".").pop().toUpperCase() : "Unknown",
+          status: "detected",
+        })),
+      scripts: Array.from(scripts)
+        .slice(0, 5)
+        .map((script, index) => ({
+          name: script.src ? new URL(script.src, websiteData.url).pathname.split("/").pop() : `script-${index + 1}`,
+          size: "Unknown",
+          type: "JavaScript",
+          status: "detected",
+        })),
+      fonts: [
+        {
+          name: "Google Fonts",
+          variants: "Various",
+          format: "WOFF2",
+          status: html.includes("fonts.googleapis.com") ? "detected" : "info",
+        },
+        {
+          name: "Font Awesome",
+          version: "Unknown",
+          format: "WOFF2",
+          status: html.includes("font-awesome") || html.includes("fontawesome") ? "detected" : "info",
+        },
+      ],
+      external: Array.from(
+        new Set([
+          ...Array.from(scripts)
+            .map((s) => s.src)
+            .filter((src) => src && !src.startsWith("/")),
+          ...Array.from(stylesheets)
+            .map((s) => s.href)
+            .filter((href) => href && !href.startsWith("/")),
+        ]),
+      )
+        .slice(0, 5)
+        .map((url) => {
+          try {
+            const domain = new URL(url, websiteData.url).hostname
+            return { name: domain, domain, status: "loaded" }
+          } catch {
+            return { name: "Invalid URL", domain: "Unknown", status: "error" }
+          }
+        }),
+    }
+  }
+
+  async extractSourceCode(websiteData) {
+    const html = websiteData.html
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, "text/html")
+
+    // Extract CSS
+    const styleElements = doc.querySelectorAll("style")
+    const css = Array.from(styleElements)
+      .map((style) => style.textContent)
+      .join("\n\n")
+
+    // Extract JavaScript
+    const scriptElements = doc.querySelectorAll("script:not([src])")
+    const js = Array.from(scriptElements)
+      .map((script) => script.textContent)
+      .join("\n\n")
+
+    return {
+      html: this.formatHTML(html),
+      css: css || "/* No inline CSS found */",
+      js: js || "// No inline JavaScript found",
+    }
+  }
+
+  generateOverviewData(url, domain, analysisTime) {
+    return {
+      url: url,
+      domain: domain,
+      title: `${domain} - Analysis Report`,
+      description: `Comprehensive analysis of ${domain}`,
+      status: "Completed",
+      lastAnalyzed: new Date().toLocaleString("my-MM"),
+      analysisTime: `${analysisTime}ms`,
+      timestamp: new Date().toISOString(),
+    }
+  }
+
+  async saveAnalysisToDatabase() {
+    if (!this.currentUser) return
+
+    try {
+      const domain = new URL(this.currentUrl).hostname
+
+      // First, insert or update website record
+      const { data: websiteData, error: websiteError } = await this.supabase
+        .from("websites")
+        .upsert(
+          {
+            user_id: this.currentUser.id,
+            url: this.currentUrl,
             domain: domain,
-            title: `${domain} - Analysis Report`,
-            description: `Comprehensive analysis of ${domain}`,
-            status: 'Completed',
-            lastAnalyzed: new Date().toLocaleString('my-MM'),
-            analysisTime: `${analysisTime}ms`,
-            timestamp: new Date().toISOString()
-        };
+            title: this.analysisData.overview.title,
+            description: this.analysisData.overview.description,
+            status: "completed",
+            last_analyzed_at: new Date().toISOString(),
+            analysis_count: 1,
+          },
+          {
+            onConflict: "user_id,url",
+            ignoreDuplicates: false,
+          },
+        )
+        .select()
+        .single()
+
+      if (websiteError) throw websiteError
+
+      // Then, insert analysis results
+      const { data: analysisResult, error: analysisError } = await this.supabase
+        .from("analysis_results")
+        .insert({
+          website_id: websiteData.id,
+          user_id: this.currentUser.id,
+          analysis_type: "full",
+          overview_data: this.analysisData.overview,
+          technology_data: this.analysisData.technology,
+          server_data: this.analysisData.server,
+          security_data: this.analysisData.security,
+          performance_data: this.analysisData.performance,
+          seo_data: this.analysisData.seo,
+          api_data: this.analysisData.apis,
+          assets_data: this.analysisData.assets,
+          source_code: this.analysisData.code,
+          analysis_duration: Number.parseInt(this.analysisData.metadata.analysisTime),
+          analysis_score: this.calculateAnalysisScore(),
+          issues_found: this.countIssues(),
+          recommendations: this.generateRecommendations(),
+        })
+        .select()
+        .single()
+
+      if (analysisError) throw analysisError
+
+      this.showNotification("Analysis saved to database successfully!", "success")
+
+      // Refresh user stats and recent analyses
+      await this.loadUserStats()
+      await this.loadRecentAnalyses()
+    } catch (error) {
+      console.error("Failed to save analysis to database:", error)
+      this.showNotification("Failed to save analysis to database", "error")
     }
+  }
 
-    async saveAnalysisToDatabase() {
-        if (!this.currentUser) return;
+  calculateAnalysisScore() {
+    // Simple scoring algorithm based on detected issues
+    let score = 100
+    const issues = this.countIssues()
+    score -= Math.min(issues * 5, 50) // Deduct 5 points per issue, max 50 points
+    return Math.max(score, 0)
+  }
 
-        try {
-            const domain = new URL(this.currentUrl).hostname;
-            
-            // First, insert or update website record
-            const { data: websiteData, error: websiteError } = await this.supabase
-                .from('websites')
-                .upsert({
-                    user_id: this.currentUser.id,
-                    url: this.currentUrl,
-                    domain: domain,
-                    title: this.analysisData.overview.title,
-                    description: this.analysisData.overview.description,
-                    status: 'completed',
-                    last_analyzed_at: new Date().toISOString(),
-                    analysis_count: 1
-                }, {
-                    onConflict: 'user_id,url',
-                    ignoreDuplicates: false
-                })
-                .select()
-                .single();
+  countIssues() {
+    let issues = 0
 
-            if (websiteError) throw websiteError;
-
-            // Then, insert analysis results
-            const { data: analysisResult, error: analysisError } = await this.supabase
-                .from('analysis_results')
-                .insert({
-                    website_id: websiteData.id,
-                    user_id: this.currentUser.id,
-                    analysis_type: 'full',
-                    overview_data: this.analysisData.overview,
-                    technology_data: this.analysisData.technology,
-                    server_data: this.analysisData.server,
-                    security_data: this.analysisData.security,
-                    performance_data: this.analysisData.performance,
-                    seo_data: this.analysisData.seo,
-                    api_data: this.analysisData.apis,
-                    assets_data: this.analysisData.assets,
-                    source_code: this.analysisData.code,
-                    analysis_duration: parseInt(this.analysisData.metadata.analysisTime),
-                    analysis_score: this.calculateAnalysisScore(),
-                    issues_found: this.countIssues(),
-                    recommendations: this.generateRecommendations()
-                })
-                .select()
-                .single();
-
-            if (analysisError) throw analysisError;
-
-            this.showNotification('Analysis saved to database successfully!', 'success');
-            
-            // Refresh user stats and recent analyses
-            await this.loadUserStats();
-            await this.loadRecentAnalyses();
-
-        } catch (error) {
-            console.error('Failed to save analysis to database:', error);
-            this.showNotification('Failed to save analysis to database', 'error');
+    // Count security issues
+    if (this.analysisData.security) {
+      Object.values(this.analysisData.security).forEach((category) => {
+        if (Array.isArray(category)) {
+          issues += category.filter((item) => item.status === "warning" || item.status === "error").length
         }
+      })
     }
 
-    calculateAnalysisScore() {
-        // Simple scoring algorithm based on detected issues
-        let score = 100;
-        const issues = this.countIssues();
-        score -= Math.min(issues * 5, 50); // Deduct 5 points per issue, max 50 points
-        return Math.max(score, 0);
-    }
-
-    countIssues() {
-        let issues = 0;
-        
-        // Count security issues
-        if (this.analysisData.security) {
-            Object.values(this.analysisData.security).forEach(category => {
-                if (Array.isArray(category)) {
-                    issues += category.filter(item => item.status === 'warning' || item.status === 'error').length;
-                }
-            });
+    // Count performance issues
+    if (this.analysisData.performance) {
+      Object.values(this.analysisData.performance).forEach((category) => {
+        if (Array.isArray(category)) {
+          issues += category.filter((item) => item.status === "warning" || item.status === "error").length
         }
-        
-        // Count performance issues
-        if (this.analysisData.performance) {
-            Object.values(this.analysisData.performance).forEach(category => {
-                if (Array.isArray(category)) {
-                    issues += category.filter(item => item.status === 'warning' || item.status === 'error').length;
-                }
-            });
+      })
+    }
+
+    return issues
+  }
+
+  generateRecommendations() {
+    const recommendations = []
+
+    // Security recommendations
+    if (this.analysisData.security?.headers) {
+      const missingHeaders = this.analysisData.security.headers.filter(
+        (h) => h.status === "warning" || h.status === "error",
+      )
+      if (missingHeaders.length > 0) {
+        recommendations.push({
+          category: "Security",
+          priority: "High",
+          title: "Implement missing security headers",
+          description: "Add Content-Security-Policy and other security headers to protect against common attacks.",
+        })
+      }
+    }
+
+    // Performance recommendations
+    if (this.analysisData.performance?.optimization) {
+      const optimizationIssues = this.analysisData.performance.optimization.filter(
+        (o) => o.status === "warning" || o.status === "error",
+      )
+      if (optimizationIssues.length > 0) {
+        recommendations.push({
+          category: "Performance",
+          priority: "Medium",
+          title: "Optimize website performance",
+          description: "Implement image optimization, code minification, and caching strategies.",
+        })
+      }
+    }
+
+    return recommendations
+  }
+
+  // UI Methods
+  showLoading() {
+    document.getElementById("loading-section").style.display = "block"
+    document.getElementById("results-section").style.display = "none"
+    document.getElementById("error-section").style.display = "none"
+    this.updateProgress(0, "Starting analysis...")
+  }
+
+  updateProgress(percentage, message) {
+    const progressFill = document.getElementById("progress-fill")
+    const progressText = document.getElementById("progress-text")
+
+    if (progressFill) {
+      progressFill.style.width = `${percentage}%`
+    }
+
+    if (progressText) {
+      progressText.textContent = `${percentage}%`
+    }
+
+    // Update step indicators
+    const steps = ["step-1", "step-2", "step-3", "step-4", "step-5"]
+    const currentStep = Math.floor(percentage / 20)
+
+    steps.forEach((stepId, index) => {
+      const stepElement = document.getElementById(stepId)
+      if (stepElement) {
+        if (index <= currentStep) {
+          stepElement.classList.add("active")
+        } else {
+          stepElement.classList.remove("active")
         }
-        
-        return issues;
-    }
+      }
+    })
+  }
 
-    generateRecommendations() {
-        const recommendations = [];
-        
-        // Security recommendations
-        if (this.analysisData.security?.headers) {
-            const missingHeaders = this.analysisData.security.headers.filter(h => h.status === 'warning' || h.status === 'error');
-            if (missingHeaders.length > 0) {
-                recommendations.push({
-                    category: 'Security',
-                    priority: 'High',
-                    title: 'Implement missing security headers',
-                    description: 'Add Content-Security-Policy and other security headers to protect against common attacks.'
-                });
-            }
-        }
-        
-        // Performance recommendations
-        if (this.analysisData.performance?.optimization) {
-            const optimizationIssues = this.analysisData.performance.optimization.filter(o => o.status === 'warning' || o.status === 'error');
-            if (optimizationIssues.length > 0) {
-                recommendations.push({
-                    category: 'Performance',
-                    priority: 'Medium',
-                    title: 'Optimize website performance',
-                    description: 'Implement image optimization, code minification, and caching strategies.'
-                });
-            }
-        }
-        
-        return recommendations;
-    }
+  showError(message) {
+    document.getElementById("error-message").textContent = message
+    document.getElementById("error-section").style.display = "block"
+    document.getElementById("loading-section").style.display = "none"
+    document.getElementById("results-section").style.display = "none"
+  }
 
-    // UI Methods
-    showLoading() {
-        document.getElementById('loading-section').style.display = 'block';
-        document.getElementById('results-section').style.display = 'none';
-        document.getElementById('error-section').style.display = 'none';
-        this.updateProgress(0, 'Starting analysis...');
-    }
+  displayResults() {
+    this.displayOverview()
+    this.displayTechnologyStack()
+    this.displayServerInfo()
+    this.displaySecurityAnalysis()
+    this.displayPerformanceMetrics()
+    this.displaySEOAnalysis()
+    this.displayAPIAnalysis()
+    this.displayAssetsAnalysis()
+    this.updateCodeDisplay()
 
-    updateProgress(percentage, message) {
-        const progressFill = document.getElementById('progress-fill');
-        const progressText = document.getElementById('progress-text');
-        
-        if (progressFill) {
-            progressFill.style.width = `${percentage}%`;
-        }
-        
-        if (progressText) {
-            progressText.textContent = `${percentage}%`;
-        }
+    document.getElementById("loading-section").style.display = "none"
+    document.getElementById("error-section").style.display = "none"
+    document.getElementById("results-section").style.display = "block"
+  }
 
-        // Update step indicators
-        const steps = ['step-1', 'step-2', 'step-3', 'step-4', 'step-5'];
-        const currentStep = Math.floor(percentage / 20);
-        
-        steps.forEach((stepId, index) => {
-            const stepElement = document.getElementById(stepId);
-            if (stepElement) {
-                if (index <= currentStep) {
-                    stepElement.classList.add('active');
-                } else {
-                    stepElement.classList.remove('active');
-                }
-            }
-        });
-    }
+  displayOverview() {
+    const overview = this.analysisData.overview
+    const container = document.getElementById("overview-content")
 
-    showError(message) {
-        document.getElementById('error-message').textContent = message;
-        document.getElementById('error-section').style.display = 'block';
-        document.getElementById('loading-section').style.display = 'none';
-        document.getElementById('results-section').style.display = 'none';
-    }
-
-    displayResults() {
-        this.displayOverview();
-        this.displayTechnologyStack();
-        this.displayServerInfo();
-        this.displaySecurityAnalysis();
-        this.displayPerformanceMetrics();
-        this.displaySEOAnalysis();
-        this.displayAPIAnalysis();
-        this.displayAssetsAnalysis();
-        this.updateCodeDisplay();
-
-        document.getElementById('loading-section').style.display = 'none';
-        document.getElementById('error-section').style.display = 'none';
-        document.getElementById('results-section').style.display = 'block';
-    }
-
-    displayOverview() {
-        const overview = this.analysisData.overview;
-        const container = document.getElementById('overview-content');
-        
-        container.innerHTML = `
+    container.innerHTML = `
             <div class="overview-grid">
                 <div class="overview-item">
                     <div class="overview-icon">
@@ -1092,23 +1184,25 @@ class ProductionWebsiteAnalyzer {
                     </div>
                 </div>
             </div>
-        `;
-    }
+        `
+  }
 
-    displayTechnologyStack() {
-        const tech = this.analysisData.technology;
-        
-        this.renderTechList('frontend-tech', tech.frontend);
-        this.renderTechList('backend-tech', tech.backend);
-        this.renderTechList('cloud-services', tech.cloud);
-        this.renderTechList('analytics-tracking', tech.analytics);
-    }
+  displayTechnologyStack() {
+    const tech = this.analysisData.technology
 
-    renderTechList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderTechList("frontend-tech", tech.frontend)
+    this.renderTechList("backend-tech", tech.backend)
+    this.renderTechList("cloud-services", tech.cloud)
+    this.renderTechList("analytics-tracking", tech.analytics)
+  }
+
+  renderTechList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="tech-item">
                 <div class="item-info">
                     <div class="item-icon">
@@ -1117,28 +1211,32 @@ class ProductionWebsiteAnalyzer {
                     <div class="item-details">
                         <div class="item-name">${item.name}</div>
                         <div class="item-description">${item.description}</div>
-                        ${item.version ? `<div class="item-version">v${item.version}</div>` : ''}
+                        ${item.version ? `<div class="item-version">v${item.version}</div>` : ""}
                     </div>
                 </div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displayServerInfo() {
-        const server = this.analysisData.server;
-        
-        this.renderInfoList('server-info', server.server);
-        this.renderInfoList('dns-info', server.dns);
-        this.renderInfoList('ssl-info', server.ssl);
-        this.renderInfoList('cdn-info', server.cdn);
-    }
+  displayServerInfo() {
+    const server = this.analysisData.server
 
-    renderInfoList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderInfoList("server-info", server.server)
+    this.renderInfoList("dns-info", server.dns)
+    this.renderInfoList("ssl-info", server.ssl)
+    this.renderInfoList("cdn-info", server.cdn)
+  }
+
+  renderInfoList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="info-item">
                 <div class="item-info">
                     <div class="item-details">
@@ -1147,72 +1245,84 @@ class ProductionWebsiteAnalyzer {
                     </div>
                 </div>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displaySecurityAnalysis() {
-        const security = this.analysisData.security;
-        
-        this.renderSecurityList('security-headers', security.headers);
-        this.renderSecurityList('vulnerability-scan', security.vulnerabilities);
-        this.renderSecurityList('privacy-compliance', security.privacy);
-        this.renderSecurityList('third-party-trackers', security.trackers);
-    }
+  displaySecurityAnalysis() {
+    const security = this.analysisData.security
 
-    renderSecurityList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderSecurityList("security-headers", security.headers)
+    this.renderSecurityList("vulnerability-scan", security.vulnerabilities)
+    this.renderSecurityList("privacy-compliance", security.privacy)
+    this.renderSecurityList("third-party-trackers", security.trackers)
+  }
+
+  renderSecurityList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="security-item">
                 <div class="item-info">
                     <div class="item-details">
                         <div class="item-name">${item.name}</div>
                         <div class="item-description">${item.description}</div>
-                        ${item.type ? `<div class="item-type">${item.type}</div>` : ''}
+                        ${item.type ? `<div class="item-type">${item.type}</div>` : ""}
                     </div>
                 </div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displayPerformanceMetrics() {
-        const performance = this.analysisData.performance;
-        
-        this.renderPerformanceMetrics('load-times', performance.loadTimes);
-        this.renderPerformanceMetrics('resource-sizes', performance.resourceSizes);
-        this.renderPerformanceMetrics('mobile-performance', performance.mobile);
-        this.renderPerformanceMetrics('optimization', performance.optimization);
-    }
+  displayPerformanceMetrics() {
+    const performance = this.analysisData.performance
 
-    renderPerformanceMetrics(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderPerformanceMetrics("load-times", performance.loadTimes)
+    this.renderPerformanceMetrics("resource-sizes", performance.resourceSizes)
+    this.renderPerformanceMetrics("mobile-performance", performance.mobile)
+    this.renderPerformanceMetrics("optimization", performance.optimization)
+  }
+
+  renderPerformanceMetrics(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="metric-item">
                 <div class="metric-value">${item.value}</div>
                 <div class="metric-label">${item.label}</div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displaySEOAnalysis() {
-        const seo = this.analysisData.seo;
-        
-        this.renderSEOList('meta-tags', seo.metaTags);
-        this.renderSEOList('content-structure', seo.contentStructure);
-        this.renderSEOList('links-analysis', seo.links);
-        this.renderSEOList('schema-data', seo.schema);
-    }
+  displaySEOAnalysis() {
+    const seo = this.analysisData.seo
 
-    renderSEOList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderSEOList("meta-tags", seo.metaTags)
+    this.renderSEOList("content-structure", seo.contentStructure)
+    this.renderSEOList("links-analysis", seo.links)
+    this.renderSEOList("schema-data", seo.schema)
+  }
+
+  renderSEOList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="seo-item">
                 <div class="item-info">
                     <div class="item-details">
@@ -1222,816 +1332,288 @@ class ProductionWebsiteAnalyzer {
                 </div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displayAPIAnalysis() {
-        const apis = this.analysisData.apis;
-        
-        this.renderAPIList('api-endpoints', apis.endpoints);
-        this.renderAPIList('api-keys', apis.keys);
-        this.renderAPIList('social-apis', apis.social);
-        this.renderAPIList('realtime-connections', apis.realtime);
-    }
+  displayAPIAnalysis() {
+    const apis = this.analysisData.apis
 
-    renderAPIList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderAPIList("api-endpoints", apis.endpoints)
+    this.renderAPIList("api-keys", apis.keys)
+    this.renderAPIList("social-apis", apis.social)
+    this.renderAPIList("realtime-connections", apis.realtime)
+  }
+
+  renderAPIList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="api-item">
                 <div class="item-info">
                     <div class="item-details">
                         <div class="item-name">${item.name}</div>
                         <div class="item-description">${item.description}</div>
-                        ${item.method ? `<div class="item-method">${item.method}</div>` : ''}
-                        ${item.key ? `<div class="item-key">${item.key}</div>` : ''}
-                        ${item.version ? `<div class="item-version">v${item.version}</div>` : ''}
-                        ${item.protocol ? `<div class="item-protocol">${item.protocol}</div>` : ''}
-                        ${item.service ? `<div class="item-service">${item.service}</div>` : ''}
+                        ${item.method ? `<div class="item-method">${item.method}</div>` : ""}
+                        ${item.key ? `<div class="item-key">${item.key}</div>` : ""}
+                        ${item.version ? `<div class="item-version">v${item.version}</div>` : ""}
+                        ${item.protocol ? `<div class="item-protocol">${item.protocol}</div>` : ""}
+                        ${item.service ? `<div class="item-service">${item.service}</div>` : ""}
                     </div>
                 </div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
-    }
+        `,
+      )
+      .join("")
+  }
 
-    displayAssetsAnalysis() {
-        const assets = this.analysisData.assets;
-        
-        this.renderAssetsList('images-media', assets.images);
-        this.renderAssetsList('scripts-styles', assets.scripts);
-        this.renderAssetsList('fonts-icons', assets.fonts);
-        this.renderAssetsList('external-resources', assets.external);
-    }
+  displayAssetsAnalysis() {
+    const assets = this.analysisData.assets
 
-    renderAssetsList(containerId, items) {
-        const container = document.getElementById(containerId);
-        if (!container || !items) return;
-        
-        container.innerHTML = items.map(item => `
+    this.renderAssetsList("images-media", assets.images)
+    this.renderAssetsList("scripts-styles", assets.scripts)
+    this.renderAssetsList("fonts-icons", assets.fonts)
+    this.renderAssetsList("external-resources", assets.external)
+  }
+
+  renderAssetsList(containerId, items) {
+    const container = document.getElementById(containerId)
+    if (!container || !items) return
+
+    container.innerHTML = items
+      .map(
+        (item) => `
             <div class="asset-item">
                 <div class="item-info">
                     <div class="item-details">
                         <div class="item-name">${item.name}</div>
                         <div class="item-description">
-                            ${item.size ? `Size: ${item.size}` : ''}
-                            ${item.format ? ` | Format: ${item.format}` : ''}
-                            ${item.type ? ` | Type: ${item.type}` : ''}
-                            ${item.variants ? ` | Variants: ${item.variants}` : ''}
-                            ${item.domain ? ` | Domain: ${item.domain}` : ''}
+                            ${item.size ? `Size: ${item.size}` : ""}
+                            ${item.format ? ` | Format: ${item.format}` : ""}
+                            ${item.type ? ` | Type: ${item.type}` : ""}
+                            ${item.variants ? ` | Variants: ${item.variants}` : ""}
+                            ${item.domain ? ` | Domain: ${item.domain}` : ""}
                         </div>
                     </div>
                 </div>
                 <span class="item-status status-${item.status}">${item.status}</span>
             </div>
-        `).join('');
+        `,
+      )
+      .join("")
+  }
+
+  // Tab switching
+  switchTab(tabId) {
+    document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"))
+    document.querySelectorAll(".tab-pane").forEach((pane) => pane.classList.remove("active"))
+
+    document.querySelector(`[data-tab="${tabId}"]`).classList.add("active")
+    document.getElementById(`${tabId}-tab`).classList.add("active")
+  }
+
+  switchCodeTab(codeType) {
+    this.currentCodeType = codeType
+
+    document.querySelectorAll(".code-tab-btn").forEach((btn) => btn.classList.remove("active"))
+    document.querySelector(`[data-code="${codeType}"]`).classList.add("active")
+
+    this.updateCodeDisplay()
+  }
+
+  updateCodeDisplay() {
+    const code = this.analysisData.code
+    const codeElement = document.getElementById("source-code")
+
+    if (!code || !codeElement) return
+
+    switch (this.currentCodeType) {
+      case "html":
+        codeElement.textContent = code.html
+        break
+      case "css":
+        codeElement.textContent = code.css
+        break
+      case "js":
+        codeElement.textContent = code.js
+        break
+    }
+  }
+
+  // Code actions
+  copyCode() {
+    const codeElement = document.getElementById("source-code")
+    navigator.clipboard
+      .writeText(codeElement.textContent)
+      .then(() => {
+        this.showNotification("Code copied to clipboard!", "success")
+      })
+      .catch(() => {
+        this.showNotification("Failed to copy code", "error")
+      })
+  }
+
+  downloadCode() {
+    const codeElement = document.getElementById("source-code")
+    const code = codeElement.textContent
+    const filename = `${this.currentCodeType === "js" ? "script.js" : this.currentCodeType === "css" ? "styles.css" : "index.html"}`
+
+    const blob = new Blob([code], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  formatCode() {
+    const codeElement = document.getElementById("source-code")
+    let code = codeElement.textContent
+
+    if (this.currentCodeType === "html") {
+      code = this.formatHTML(code)
+    } else if (this.currentCodeType === "css") {
+      code = this.formatCSS(code)
+    } else if (this.currentCodeType === "js") {
+      code = this.formatJS(code)
     }
 
-    // Tab switching
-    switchTab(tabId) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+    codeElement.textContent = code
+  }
 
-        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-        document.getElementById(`${tabId}-tab`).classList.add('active');
+  formatHTML(html) {
+    return html.replace(/></g, ">\n<").replace(/^\s+|\s+$/g, "")
+  }
+
+  formatCSS(css) {
+    return css.replace(/\{/g, " {\n  ").replace(/\}/g, "\n}\n").replace(/;/g, ";\n  ")
+  }
+
+  formatJS(js) {
+    return js.replace(/\{/g, " {\n  ").replace(/\}/g, "\n}\n").replace(/;/g, ";\n")
+  }
+
+  // Report actions
+  async saveReport() {
+    if (!this.currentUser) {
+      this.showNotification("Please sign in to save reports", "warning")
+      return
     }
 
-    switchCodeTab(codeType) {
-        this.currentCodeType = codeType;
-        
-        document.querySelectorAll('.code-tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelector(`[data-code="${codeType}"]`).classList.add('active');
-        
-        this.updateCodeDisplay();
+    try {
+      const reportName = prompt("Enter report name:") || `Analysis Report - ${new Date().toLocaleDateString()}`
+
+      const { data, error } = await this.supabase.from("saved_reports").insert({
+        user_id: this.currentUser.id,
+        website_id: null, // Would need to get this from current analysis
+        analysis_result_id: null, // Would need to get this from current analysis
+        report_name: reportName,
+        report_type: "json",
+        report_data: this.analysisData,
+      })
+
+      if (error) throw error
+
+      this.showNotification("Report saved successfully!", "success")
+    } catch (error) {
+      console.error("Failed to save report:", error)
+      this.showNotification("Failed to save report", "error")
     }
+  }
 
-    updateCodeDisplay() {
-        const code = this.analysisData.code;
-        const codeElement = document.getElementById('source-code');
-        
-        if (!code || !codeElement) return;
-        
-        switch (this.currentCodeType) {
-            case 'html':
-                codeElement.textContent = code.html;
-                break;
-            case 'css':
-                codeElement.textContent = code.css;
-                break;
-            case 'js':
-                codeElement.textContent = code.js;
-                break;
-        }
+  shareAnalysis() {
+    const url = `${window.location.origin}?url=${encodeURIComponent(this.currentUrl)}`
+
+    if (navigator.share) {
+      navigator.share({
+        title: "Website Analysis Report",
+        text: `Check out this website analysis for ${this.currentUrl}`,
+        url: url,
+      })
+    } else {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          this.showNotification("Share link copied to clipboard!", "success")
+        })
+        .catch(() => {
+          this.showNotification("Failed to copy share link", "error")
+        })
     }
+  }
 
-    // Code actions
-    copyCode() {
-        const codeElement = document.getElementById('source-code');
-        navigator.clipboard.writeText(codeElement.textContent)
-            .then(() => {
-                this.showNotification('Code copied to clipboard!', 'success');
-            })
-            .catch(() => {
-                this.showNotification('Failed to copy code', 'error');
-            });
+  exportPDF() {
+    this.showNotification("PDF export feature coming soon!", "info")
+  }
+
+  // Utility methods
+  formatBytes(bytes) {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString("my-MM", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  isValidUrl(string) {
+    try {
+      new URL(string)
+      return true
+    } catch (_) {
+      return false
     }
+  }
 
-    downloadCode() {
-        const codeElement = document.getElementById('source-code');
-        const code = codeElement.textContent;
-        const filename = `${this.currentCodeType === 'js' ? 'script.js' : this.currentCodeType === 'css' ? 'styles.css' : 'index.html'}`;
-        
-        const blob = new Blob([code], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    formatCode() {
-        const codeElement = document.getElementById('source-code');
-        let code = codeElement.textContent;
-        
-        if (this.currentCodeType === 'html') {
-            code = this.formatHTML(code);
-        } else if (this.currentCodeType === 'css') {
-            code = this.formatCSS(code);
-        } else if (this.currentCodeType === 'js') {
-            code = this.formatJS(code);
-        }
-        
-        codeElement.textContent = code;
-    }
-
-    formatHTML(html) {
-        return html.replace(/></g, '>\n<').replace(/^\s+|\s+$/g, '');
-    }
-
-    formatCSS(css) {
-        return css.replace(/\{/g, ' {\n  ').replace(/\}/g, '\n}\n').replace(/;/g, ';\n  ');
-    }
-
-    formatJS(js) {
-        return js.replace(/\{/g, ' {\n  ').replace(/\}/g, '\n}\n').replace(/;/g, ';\n');
-    }
-
-    // Report actions
-    async saveReport() {
-        if (!this.currentUser) {
-            this.showNotification('Please sign in to save reports', 'warning');
-            return;
-        }
-
-        try {
-            const reportName = prompt('Enter report name:') || `Analysis Report - ${new Date().toLocaleDateString()}`;
-            
-            const { data, error } = await this.supabase
-                .from('saved_reports')
-                .insert({
-                    user_id: this.currentUser.id,
-                    website_id: null, // Would need to get this from current analysis
-                    analysis_result_id: null, // Would need to get this from current analysis
-                    report_name: reportName,
-                    report_type: 'json',
-                    report_data: this.analysisData
-                });
-
-            if (error) throw error;
-
-            this.showNotification('Report saved successfully!', 'success');
-        } catch (error) {
-            console.error('Failed to save report:', error);
-            this.showNotification('Failed to save report', 'error');
-        }
-    }
-
-    shareAnalysis() {
-        const url = `${window.location.origin}?url=${encodeURIComponent(this.currentUrl)}`;
-        
-        if (navigator.share) {
-            navigator.share({
-                title: 'Website Analysis Report',
-                text: `Check out this website analysis for ${this.currentUrl}`,
-                url: url
-            });
-        } else {
-            navigator.clipboard.writeText(url)
-                .then(() => {
-                    this.showNotification('Share link copied to clipboard!', 'success');
-                })
-                .catch(() => {
-                    this.showNotification('Failed to copy share link', 'error');
-                });
-        }
-    }
-
-    exportPDF() {
-        this.showNotification('PDF export feature coming soon!', 'info');
-    }
-
-    // Utility methods
-    formatBytes(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString('my-MM', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-
-    isValidUrl(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
-
-    showNotification(message, type) {
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.innerHTML = `
-            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+  showNotification(message, type) {
+    const notification = document.createElement("div")
+    notification.className = `notification notification-${type}`
+    notification.innerHTML = `
+            <i class="fas fa-${type === "success" ? "check-circle" : type === "error" ? "exclamation-circle" : type === "warning" ? "exclamation-triangle" : "info-circle"}"></i>
             <span>${message}</span>
             <button class="notification-close">
                 <i class="fas fa-times"></i>
             </button>
-        `;
-        
-        const container = document.getElementById('notifications-container');
-        container.appendChild(notification);
-        
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-            }
-        }, 5000);
-        
-        // Manual close
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-            notification.remove();
-        });
-        
-        // Animate in
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 100);
-    }
+        `
+
+    const container = document.getElementById("notifications-container")
+    container.appendChild(notification)
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.remove()
+      }
+    }, 5000)
+
+    // Manual close
+    notification.querySelector(".notification-close").addEventListener("click", () => {
+      notification.remove()
+    })
+
+    // Animate in
+    setTimeout(() => {
+      notification.classList.add("show")
+    }, 100)
+  }
 }
 
 // Initialize the analyzer when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.analyzer = new ProductionWebsiteAnalyzer();
-});
-
-// Add notification styles
-const notificationStyles = `
-#notifications-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 10000;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.notification {
-    padding: 15px 20px;
-    border-radius: 8px;
-    color: white;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transform: translateX(400px);
-    transition: transform 0.3s ease;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    min-width: 300px;
-    max-width: 400px;
-}
-
-.notification.show {
-    transform: translateX(0);
-}
-
-.notification-success {
-    background: #10b981;
-}
-
-.notification-error {
-    background: #ef4444;
-}
-
-.notification-warning {
-    background: #f59e0b;
-}
-
-.notification-info {
-    background: #3b82f6;
-}
-
-.notification-close {
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    margin-left: auto;
-    padding: 5px;
-    border-radius: 4px;
-    transition: background-color 0.3s ease;
-}
-
-.notification-close:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-
-/* Modal styles */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 10000;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 25px;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-header h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    color: #1f2937;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    cursor: pointer;
-    color: #6b7280;
-    padding: 5px;
-    border-radius: 4px;
-    transition: all 0.3s ease;
-}
-
-.modal-close:hover {
-    background-color: #f3f4f6;
-    color: #1f2937;
-}
-
-.modal-body {
-    padding: 25px;
-}
-
-.form-group {
-    margin-bottom: 20px;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    color: #374151;
-}
-
-.form-group input {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 16px;
-    transition: border-color 0.3s ease;
-}
-
-.form-group input:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.btn-google {
-    background: #4285f4;
-    color: white;
-    border: none;
-    padding: 12px 20px;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    transition: background-color 0.3s ease;
-}
-
-.btn-google:hover {
-    background: #3367d6;
-}
-
-.auth-switch {
-    text-align: center;
-    margin: 20px 0;
-}
-
-.auth-switch a {
-    color: #2563eb;
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.auth-switch a:hover {
-    text-decoration: underline;
-}
-
-.divider {
-    text-align: center;
-    margin: 20px 0;
-    position: relative;
-}
-
-.divider::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: #e5e7eb;
-}
-
-.divider span {
-    background: white;
-    padding: 0 15px;
-    color: #6b7280;
-    font-size: 14px;
-}
-
-/* User menu styles */
-.user-menu {
-    position: relative;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: 6px;
-    transition: background-color 0.3s ease;
-}
-
-.user-info:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
-.user-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    min-width: 200px;
-    display: none;
-    z-index: 1000;
-}
-
-.user-menu:hover .user-dropdown {
-    display: block;
-}
-
-.user-dropdown a {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    color: #374151;
-    text-decoration: none;
-    transition: background-color 0.3s ease;
-}
-
-.user-dropdown a:hover {
-    background-color: #f3f4f6;
-}
-
-.user-dropdown a:first-child {
-    border-radius: 8px 8px 0 0;
-}
-
-.user-dropdown a:last-child {
-    border-radius: 0 0 8px 8px;
-}
-
-/* Header stats */
-.header-stats {
-    display: flex;
-    gap: 30px;
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.stat-item {
-    text-align: center;
-}
-
-.stat-value {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: white;
-}
-
-.stat-label {
-    font-size: 0.875rem;
-    opacity: 0.8;
-}
-
-/* Analysis options */
-.analysis-options {
-    display: flex;
-    gap: 20px;
-    margin-top: 15px;
-    flex-wrap: wrap;
-}
-
-.option-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: #6b7280;
-}
-
-.option-item input[type="checkbox"] {
-    margin: 0;
-}
-
-/* Recent analyses */
-.recent-analyses {
-    margin-top: 30px;
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.recent-analyses h3 {
-    margin-bottom: 15px;
-    color: #1f2937;
-}
-
-.recent-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.recent-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.recent-item:hover {
-    border-color: #2563eb;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.recent-info {
-    flex: 1;
-}
-
-.recent-title {
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 4px;
-}
-
-.recent-url {
-    font-size: 0.875rem;
-    color: #6b7280;
-    margin-bottom: 4px;
-}
-
-.recent-meta {
-    display: flex;
-    gap: 15px;
-    font-size: 0.8rem;
-    color: #9ca3af;
-}
-
-.recent-analyze {
-    background: #f3f4f6;
-    border: 1px solid #d1d5db;
-    color: #374151;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.recent-analyze:hover {
-    background: #2563eb;
-    color: white;
-    border-color: #2563eb;
-}
-
-/* Progress bar */
-.loading-progress {
-    margin: 20px 0;
-    text-align: center;
-}
-
-.progress-bar {
-    width: 100%;
-    height: 8px;
-    background: #e5e7eb;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 10px;
-}
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #2563eb, #3b82f6);
-    border-radius: 4px;
-    transition: width 0.3s ease;
-    width: 0%;
-}
-
-.progress-text {
-    font-size: 0.875rem;
-    color: #6b7280;
-    font-weight: 500;
-}
-
-/* Card actions */
-.card-actions {
-    display: flex;
-    gap: 10px;
-    margin-left: auto;
-}
-
-.btn-sm {
-    padding: 6px 12px;
-    font-size: 0.875rem;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.btn-sm:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.5);
-}
-
-/* Overview grid */
-.overview-grid {
-    display: grid;
-    gap: 20px;
-}
-
-.overview-item {
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-}
-
-.overview-icon {
-    width: 60px;
-    height: 60px;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-}
-
-.overview-details h3 {
-    font-size: 1.5rem;
-    margin-bottom: 8px;
-    color: #1f2937;
-}
-
-.overview-details p {
-    color: #6b7280;
-    margin-bottom: 15px;
-}
-
-.overview-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-}
-
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.875rem;
-    color: #6b7280;
-}
-
-.meta-item i {
-    color: #2563eb;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .header-stats {
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .analysis-options {
-        flex-direction: column;
-        gap: 10px;
-    }
-    
-    .overview-item {
-        flex-direction: column;
-        text-align: center;
-    }
-    
-    .overview-meta {
-        justify-content: center;
-    }
-    
-    .card-actions {
-        flex-direction: column;
-        width: 100%;
-    }
-    
-    .recent-item {
-        flex-direction: column;
-        gap: 10px;
-        align-items: flex-start;
-    }
-    
-    .recent-analyze {
-        align-self: flex-end;
-    }
-}
-`;
-
-// Add styles to head
-const styleSheet = document.createElement('style');
-styleSheet.textContent = notificationStyles;
-document.head.appendChild(styleSheet);
+document.addEventListener("DOMContentLoaded", () => {
+  window.analyzer = new ProductionWebsiteAnalyzer()
+})
